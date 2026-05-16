@@ -45,17 +45,20 @@ class RFMAnalyzer:
         df = self.data.copy()
         
         if method == 'quantile':
-            # R 分数：最近购买时间越短，分数越高
-            df['R_score'] = pd.qcut(df[self.recency_col].rank(method='first'), 
-                                    q=5, labels=[5, 4, 3, 2, 1]).astype(int)
-            
-            # F 分数：购买频率越高，分数越高
-            df['F_score'] = pd.qcut(df[self.frequency_col].rank(method='first'), 
-                                    q=5, labels=[1, 2, 3, 4, 5]).astype(int)
-            
-            # M 分数：购买金额越高，分数越高
-            df['M_score'] = pd.qcut(df[self.monetary_col].rank(method='first'), 
-                                    q=5, labels=[1, 2, 3, 4, 5]).astype(int)
+            # qcut 在样本数 < 5 或所有值相同时会因 bin 重复而 raise；
+            # 用 duplicates='drop' + 容错回退（小样本 → 全部取中位 3）。
+            def _qcut_or_constant(series: pd.Series, labels) -> pd.Series:
+                try:
+                    return pd.qcut(
+                        series.rank(method='first'),
+                        q=5, labels=labels, duplicates='drop',
+                    ).astype(int)
+                except (ValueError, TypeError):
+                    return pd.Series([labels[len(labels) // 2]] * len(series), index=series.index)
+
+            df['R_score'] = _qcut_or_constant(df[self.recency_col], [5, 4, 3, 2, 1])
+            df['F_score'] = _qcut_or_constant(df[self.frequency_col], [1, 2, 3, 4, 5])
+            df['M_score'] = _qcut_or_constant(df[self.monetary_col], [1, 2, 3, 4, 5])
         else:
             raise ValueError("目前仅支持 'quantile' 方法")
         

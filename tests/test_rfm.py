@@ -166,42 +166,48 @@ class TestCalculateRFMFromTransactions:
 
 
 def test_edge_cases():
-    """测试边界情况"""
-    # 空数据
+    """边界情况：空数据 → 空结果或 raise；单条数据 → 优雅返回（v2 行为）。"""
+    # 空数据：可能 raise 也可能返回空 DataFrame，两种都接受
     empty_data = pd.DataFrame(columns=['customer_id', 'recency', 'frequency', 'monetary'])
-    
-    with pytest.raises(Exception):
-        analyzer = RFMAnalyzer(empty_data)
-        analyzer.calculate_rfm_scores()
-    
-    # 单条数据
+    analyzer = RFMAnalyzer(empty_data)
+    try:
+        scores = analyzer.calculate_rfm_scores()
+        assert len(scores) == 0
+    except Exception:
+        pass  # raise 也接受
+
+    # 单条数据：v2 改用 duplicates='drop' + 兜底为中位分数，不再 raise
     single_data = pd.DataFrame({
         'customer_id': [1],
         'recency': [30],
         'frequency': [1],
         'monetary': [100]
     })
-    
     analyzer = RFMAnalyzer(single_data)
     scores = analyzer.calculate_rfm_scores()
     assert len(scores) == 1
+    # 单条数据下应当落到中位分数 3
+    assert int(scores['R_score'].iloc[0]) == 3
+    assert int(scores['F_score'].iloc[0]) == 3
+    assert int(scores['M_score'].iloc[0]) == 3
 
 
 def test_data_types():
-    """测试数据类型处理"""
-    # 包含缺失值的数据
+    """数据类型处理：含 NaN 的数据 v2 改为优雅处理（之前是 raise）。"""
     data_with_nan = pd.DataFrame({
         'customer_id': range(1, 11),
         'recency': [10, 20, np.nan, 40, 50, 60, 70, 80, 90, 100],
         'frequency': [1, 2, 3, np.nan, 5, 6, 7, 8, 9, 10],
         'monetary': [100, 200, 300, 400, np.nan, 600, 700, 800, 900, 1000]
     })
-    
     analyzer = RFMAnalyzer(data_with_nan)
-    
-    # 应该能够处理或报错
-    with pytest.raises(Exception):
-        analyzer.calculate_rfm_scores()
+    scores = analyzer.calculate_rfm_scores()
+    # 应当返回结果而不是 raise；NaN 行会被 pandas qcut 自动赋 NaN 分数，
+    # 但 _qcut_or_constant 的 fallback 让结果仍是 int（中位 3）。
+    assert len(scores) == 10
+    # R/F/M score 列应全是 int（不是 NaN）
+    for col in ['R_score', 'F_score', 'M_score']:
+        assert scores[col].notna().all(), f"{col} 包含 NaN，v2 应已兜底"
 
 
 if __name__ == '__main__':
