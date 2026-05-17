@@ -20,18 +20,26 @@ class TestChurnPredictor:
     
     @pytest.fixture
     def sample_data(self):
-        """创建示例数据"""
-        np.random.seed(42)
-        n = 200
-        # 创建不平衡的流失数据 (约 20% 流失率)
-        churn_labels = np.random.choice([0, 1], n, p=[0.8, 0.2])
-        
+        """创建示例数据 — churn 由特征派生，让模型有信号可学。"""
+        rng = np.random.default_rng(42)
+        n = 400  # 200 → 400，给模型更稳定的训练样本
+        recency = rng.exponential(30, n)
+        frequency = rng.poisson(5, n) + 1
+        monetary = rng.lognormal(3, 0.8, n)
+        age = rng.normal(35, 10, n)
+
+        # 真实 churn 信号：高 recency + 低 frequency + 低 monetary → churn 概率高
+        # 加入少量随机噪声防止 perfect separation
+        logit = 0.04 * recency - 0.35 * frequency - 0.08 * np.log1p(monetary) - 1.0
+        prob = 1.0 / (1.0 + np.exp(-logit))
+        churn_labels = (rng.random(n) < prob).astype(int)
+
         return pd.DataFrame({
-            'recency': np.random.exponential(30, n),
-            'frequency': np.random.poisson(5, n) + 1,
-            'monetary': np.random.lognormal(3, 0.8, n),
-            'age': np.random.normal(35, 10, n),
-            'churn': churn_labels
+            'recency': recency,
+            'frequency': frequency,
+            'monetary': monetary,
+            'age': age,
+            'churn': churn_labels,
         })
     
     @pytest.fixture
@@ -207,27 +215,30 @@ def test_plotting_functions():
 
 
 def test_class_imbalance_handling():
-    """测试类别不平衡处理"""
-    np.random.seed(42)
-    n = 200
-    # 极度不平衡的数据 (5% 流失率)
-    churn_labels = np.random.choice([0, 1], n, p=[0.95, 0.05])
-    
+    """类别不平衡处理：用 class_weight='balanced' 时 recall 应 > 0。"""
+    rng = np.random.default_rng(42)
+    n = 600  # 200 → 600，否则 5% 不平衡下少数类只有 ~10 个样本
+    recency = rng.exponential(30, n)
+    frequency = rng.poisson(5, n) + 1
+    monetary = rng.lognormal(3, 0.8, n)
+    # 真实信号 + 高基线（让 churn 真稀有 ≈ 8%）
+    logit = 0.05 * recency - 0.4 * frequency - 3.0
+    prob = 1.0 / (1.0 + np.exp(-logit))
+    churn_labels = (rng.random(n) < prob).astype(int)
+
     data = pd.DataFrame({
-        'recency': np.random.exponential(30, n),
-        'frequency': np.random.poisson(5, n) + 1,
-        'monetary': np.random.lognormal(3, 0.8, n),
-        'churn': churn_labels
+        'recency': recency,
+        'frequency': frequency,
+        'monetary': monetary,
+        'churn': churn_labels,
     })
-    
+
     predictor = ChurnPredictor(data, target_col='churn')
     predictor.prepare_features()
-    
-    # 使用 class_weight='balanced' 应能处理不平衡
-    model = predictor.train_random_forest(class_weight='balanced')
-    
+    predictor.train_random_forest(class_weight='balanced')
+
     results = predictor.results['random_forest']
-    # 召回率不应为 0
+    # class_weight='balanced' 应让少数类至少被预测出一些（recall > 0）
     assert results['recall'] > 0
 
 
