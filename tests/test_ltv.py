@@ -20,15 +20,23 @@ class TestLTVPredictor:
     
     @pytest.fixture
     def sample_data(self):
-        """创建示例数据"""
-        np.random.seed(42)
-        n = 200
+        """创建示例数据 — ltv 由特征派生，让模型有信号可学。"""
+        rng = np.random.default_rng(42)
+        n = 400
+        recency = rng.exponential(30, n)
+        frequency = rng.poisson(5, n) + 1
+        monetary = rng.lognormal(3, 0.8, n)
+        age = rng.normal(35, 10, n)
+        # ltv 与 frequency × monetary 强相关，叠加 recency 的负向影响
+        noise = rng.normal(0, 10, n)
+        ltv = 5.0 * frequency + 1.2 * monetary - 0.3 * recency + 0.5 * age + noise
+        ltv = np.clip(ltv, 1.0, None)  # 保持 LTV > 0
         return pd.DataFrame({
-            'recency': np.random.exponential(30, n),
-            'frequency': np.random.poisson(5, n) + 1,
-            'monetary': np.random.lognormal(3, 0.8, n),
-            'age': np.random.normal(35, 10, n),
-            'ltv': np.random.lognormal(4, 1, n)
+            'recency': recency,
+            'frequency': frequency,
+            'monetary': monetary,
+            'age': age,
+            'ltv': ltv,
         })
     
     @pytest.fixture

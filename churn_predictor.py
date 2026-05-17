@@ -502,29 +502,37 @@ class ChurnPredictor:
         
         return fig
     
-    def get_high_risk_customers(self, threshold: float = 0.7, 
+    def get_high_risk_customers(self, threshold: float = 0.7,
                                X: pd.DataFrame = None) -> pd.DataFrame:
         """
-        获取高流失风险客户
-        
+        获取高流失风险客户。
+
         Args:
-            threshold: 风险阈值
-            X: 特征数据
-            
+            threshold: 风险阈值（流失概率 >= 此值视为高风险）
+            X: 用于打分的特征数据。缺省时取 self.data，并自动剔除 target 列
+               与未参与训练的列（修了 v1 把 target 列也传给模型导致
+               ValueError 的 bug）
+
         Returns:
-            高流失风险客户 DataFrame
+            高流失风险客户 DataFrame，按 churn_probability 倒序排列
         """
         if X is None:
             X = self.data
-        
-        probabilities = self.predict_churn_probability(X)
-        
+
+        # 仅保留训练时见过的特征列
+        if self.features:
+            feature_cols = [c for c in self.features if c in X.columns]
+            X_for_predict = X[feature_cols]
+        else:
+            X_for_predict = X.drop(columns=[self.target_col], errors='ignore')
+
+        probabilities = self.predict_churn_probability(X_for_predict)
+
         high_risk_mask = probabilities >= threshold
-        
-        result = X[high_risk_mask].copy()
+        result = X.loc[high_risk_mask].copy()
         result['churn_probability'] = probabilities[high_risk_mask]
         result = result.sort_values('churn_probability', ascending=False)
-        
+
         return result
 
 
