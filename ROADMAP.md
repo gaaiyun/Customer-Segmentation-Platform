@@ -9,11 +9,14 @@
 - ✅ 25 个新测试（BG/NBD 11 / Cohort 7 / Churn-Explain 7）
 - ✅ 加 `.gitignore`，清 `__pycache__/` `.coverage` 入库
 
-## v3 计划
+## v3（进行中）
 
 ### CLV 增强
 - [ ] **Pareto/NBD**（BG/NBD 的更精确版本，允许中途流失而非仅在交易点流失）
-- [ ] CLV 的不确定性区间（用 bootstrap 或 Hessian）
+- ✅ **CLV 不确定性区间** — `clv_uncertainty.py` 实现：
+  - `bootstrap_clv(df, n_bootstrap=100)` —— 客户级重抽样 + 每次重 fit BG/NBD + Gamma-Gamma，给每个客户的 CLV 分布 + 群体级总 CLV 95% CI
+  - `parameter_perturbation_clv(bg, gg, df)` —— 快速近似（参数扰动），用于 UI 反馈
+  - 17 测试覆盖：含群体 CI、单客户 percentile、discount/horizon 单调性、扰动恢复
 - [ ] CLV-segmentation：用 CLV 而非 RFM 做细分
 
 ### 留存 / 行为
